@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Wheel · Strong-Whorf</title>
+<meta name="description" content="A strong-Whorf research programme: how a taught vocabulary could reshape what a language model judges near and far, shown as a landscape drawn entirely in text characters. Illustrative model, not data.">
+<style>
+  :root { --bg:#07080c; --fg:#e2e4d8; --dim:#9aa08c; --gold:#f6c33b; --near:#4b86c9; --far:#c9533b; }
+  html,body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  main { max-width:1500px; margin:0 auto; padding:18px 16px 40px; }
+  h1 { font-size:20px; margin:4px 0 2px; font-weight:600; } h2 { font-size:15px; margin:22px 0 6px; }
+  .sub { color:var(--dim); margin:0 0 12px; }
+  .stage { position:relative; width:100%; height:min(68vh, 900px); border:1px solid #1d2028; border-radius:6px; overflow:hidden; background:#000; }
+  canvas { display:block; width:100%; height:100%; cursor:grab; touch-action:none; }
+  .caption { margin:8px 0 0; min-height:1.5em; } .caption b { color:var(--gold); font-weight:600; }
+  .row { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin:12px 0 0; }
+  button { font:inherit; font-size:13px; background:#10131a; color:var(--fg); border:1px solid #2a2e38; border-radius:4px; padding:5px 10px; cursor:pointer; }
+  button[aria-pressed="true"] { border-color:var(--gold); color:var(--gold); } button:focus-visible, input:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  label { color:var(--dim); } input[type=range] { vertical-align:middle; width:180px; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 18px; margin:12px 0 0; color:var(--dim); font-size:13px; }
+  .sw { display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:-1px; margin-right:6px; }
+  .note { color:#c8cbbf; max-width:95ch; } .fine { color:var(--dim); font-size:12px; }
+  #chain span { color:var(--dim); } #chain span.on { color:var(--gold); }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The Wheel: can a taught vocabulary change what a model perceives?</h1>
+  <p class="sub">A strong-Whorf research programme, drawn as a landscape in text characters. Illustrative model only; real results are reported in the papers.</p>
+  <div class="stage"><canvas id="c" role="img" aria-describedby="scene-alt"></canvas></div>
+  <p class="caption" id="caption"></p>
+  <p class="sr" id="scene-alt" aria-live="polite"></p>
+  <div class="row" role="group" aria-label="What to show">
+    <span class="fine">show:</span>
+    <button type="button" data-mode="untaught" aria-pressed="false">untaught model</button>
+    <button type="button" data-mode="taught" aria-pressed="true">taught model</button>
+    <button type="button" data-mode="effect" aria-pressed="false">the effect (taught − untaught)</button>
+  </div>
+  <div class="row" role="group" aria-label="Vocabulary and dose">
+    <span class="fine">vocabulary:</span>
+    <button type="button" data-lex="A" aria-pressed="true">A: two equal halves</button>
+    <button type="button" data-lex="Bp" aria-pressed="false">B′: two unequal parts</button>
+    <label>teaching dose <input type="range" id="dose" min="0" max="100" value="100" aria-label="teaching dose"></label>
+    <button type="button" id="play" aria-pressed="false">▶ animate teaching</button>
+    <button type="button" id="turn">⟳ turn</button>
+  </div>
+  <div class="legend" aria-label="Colour legend">
+    <span><span class="sw" style="background:var(--near)"></span>judged near (a lake in the valley)</span>
+    <span><span class="sw" style="background:#7a9a3a"></span>in between</span>
+    <span><span class="sw" style="background:var(--far)"></span>judged far (red rock)</span>
+    <span><span class="sw" style="background:var(--gold)"></span>pairs the vocabulary pushed apart (effect view)</span>
+    <span><span class="sw" style="background:#e8e2cf"></span>flags: the vocabulary's category boundaries</span>
+  </div>
+  <h2>How to read it</h2>
+  <p class="note">The ground is a map of every pair of positions on a ring of 32 made-up words: one position runs along one edge,
+    the other along the other edge. Height and colour are how far apart a language model judges that pair to be. Along the
+    diagonal, where a position meets itself or its neighbours, the model judges <em>near</em>: a lake lies in the valley there. Pairs
+    on opposite sides of the ring are judged <em>far</em>: they rise as red rock.</p>
+  <p class="note">Untaught, the judgement follows distance alone, so the valley is smooth. Taught two names for two groups of positions
+    (a "vocabulary", whose boundaries the flags mark), the model starts to judge pairs that cross a category boundary as farther
+    apart than equally distant pairs that do not: the land breaks into plateaus with cliffs exactly at the boundaries. The effect
+    view subtracts the untaught model: the land goes flat and grey except the <b style="color:var(--gold)">gold seams</b>, the judgements the
+    vocabulary changed. That, a learned word reshaping perception, is the strong-Whorf effect this programme tests. Drag the
+    slider, or press animate teaching, to watch it grow with more teaching; drag the picture or press turn to walk around it.</p>
+  <h2>How the research runs: a memoryless loop</h2>
+  <p class="note">Every experiment passes through the same states. Each step depends only on the current state (a Markov chain,
+    like weather): a falsifier's attack can send a draft back to be revised, a failed selftest sends a script back, and nothing is
+    trained until the analysis is sealed by hash. Probabilities are illustrative; the highlighted state walks the chain at random.</p>
+  <div id="chain" class="note"></div>
+  <p class="fine">Every cell of the picture is a text character: the material picks the glyph family, the light reaching it sets how much
+    ink the glyph carries, and the light sources set its colour. Rendering inspired by TheSketchit's single-file ASCII heightmap
+    demos; this code is our own. With reduced motion, the page shows still frames.</p>
+</main>
+<script>
+/* ===== ascii-engine v0.1.1 -- INLINED FROM ea-saix-dvil/ascii-engine =====
+ *   version:                  0.1.1
+ *   git commit:               bdfcebe3ebe09c159e4e30313cb19410f2ac0765
+ *   sha256(cat lib/*.mjs):    e7f7e7a221301c077651bb8cf76bf42704e060e52c9cf76e61da619c6daa3064
+ *   sha256_block:             e676d2e286585576800d686cbb6b9bb73f890cfa549e20571d7e4dc06b99fe55
+ *   module_order:             rng, colors, markov, heightmap, iso, fit
+ *   verifier:                 scripts/verify_engine_pin.py
+ *   API rules (v0.1.1):
+ *     - makeChain({states, P, initial?}) -- named-state default
+ *     - colorAt/glyphAt receive ctx (worldX/worldY/height + i/j/h aliases)
+ *     - renderIso format:'runs' | 'html' (with XSS escape + color validation)
+ */
+const Engine = (() => {
+  // ---- rng.mjs ----
+  // lib/rng.mjs -- crypto-backed non-deterministic RNG + seeded deterministic RNG.
+  //
+  // Both return a plain function `() -> [0, 1)` so the two are interchangeable
+  // at call sites. Consumers hoist the RNG once at setup and pass it to
+  // makeChain, heightmap sampling, etc.:
+  //
+  //   const rand = cryptoRng();          // or seededRng(1) for tests
+  //   chain.step(rand);
+  //   ...
+  //
+  // One name per concept (v0.1.0 API rule): no `cryptoRand` alias.
+  
+  function cryptoRng() {
+    const buf = new Uint32Array(1);
+    const g = typeof globalThis !== 'undefined' ? globalThis : {};
+    const src = g.crypto && typeof g.crypto.getRandomValues === 'function'
+      ? g.crypto
+      : null;
+    if (!src) {
+      throw new Error(
+        'cryptoRng: crypto.getRandomValues not available in this environment',
+      );
+    }
+    return function rng() {
+      src.getRandomValues(buf);
+      return buf[0] / 4294967296;
+    };
+  }
+  
+  function seededRng(seed) {
+    let s = (seed >>> 0) || 1;
+    return function rng() {
+      // mulberry32
+      s = (s + 0x6D2B79F5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---- colors.mjs ----
+  // lib/colors.mjs -- height-ramp colour + darken helper + HTML entity escape.
+  //
+  // ramp(t) uses a four-stop gradient with perceptually-weighted positions
+  // (0, 0.4, 0.7, 1.0) so most of the palette lands in the mid-to-high range
+  // where terrain usually reads, rather than a uniform 0/0.33/0.66/1 split.
+  // Output is `#rrggbb` for compactness in inlined HTML.
+  //
+  // shade(hex, f) darkens a colour by multiplying each channel by f. Used for
+  // side-of-column shading in the iso renderer so 3D columns have a visible
+  // depth cue.
+  //
+  // escapeChar(ch) is the single-character HTML entity escape used by the
+  // `format: 'html'` return path of renderIso -- consumer safety per the
+  // v0.1.0 API rule "HTML format must escape".
+  
+  const STOPS = [
+    [0.00, [ 43, 108, 176]],  // blue
+    [0.40, [ 56, 161, 105]],  // green
+    [0.70, [214, 158,  46]],  // amber
+    [1.00, [197,  48,  48]],  // red
+  ];
+  
+  function ramp(t) {
+    if (typeof t !== 'number' || !Number.isFinite(t)) return '#c8c8c8';
+    const v = t < 0 ? 0 : t > 1 ? 1 : t;
+    for (let k = 1; k < STOPS.length; k++) {
+      const [t0, c0] = STOPS[k - 1];
+      const [t1, c1] = STOPS[k];
+      if (v <= t1) {
+        const u = t1 === t0 ? 0 : (v - t0) / (t1 - t0);
+        const r = Math.round(c0[0] + (c1[0] - c0[0]) * u);
+        const g = Math.round(c0[1] + (c1[1] - c0[1]) * u);
+        const b = Math.round(c0[2] + (c1[2] - c0[2]) * u);
+        return '#' + hex2(r) + hex2(g) + hex2(b);
+      }
+    }
+    const last = STOPS[STOPS.length - 1][1];
+    return '#' + hex2(last[0]) + hex2(last[1]) + hex2(last[2]);
+  }
+  
+  function shade(hex, f) {
+    // Accepts `#rrggbb` (7 chars). Multiplies each channel by f in [0, 1].
+    if (typeof hex !== 'string' || hex.length !== 7 || hex[0] !== '#') return hex;
+    const v = parseInt(hex.slice(1), 16);
+    const r = Math.round(((v >> 16) & 0xff) * f);
+    const g = Math.round(((v >>  8) & 0xff) * f);
+    const b = Math.round(( v        & 0xff) * f);
+    return '#' + hex2(r) + hex2(g) + hex2(b);
+  }
+  
+  function escapeChar(ch) {
+    if (ch === '&') return '&amp;';
+    if (ch === '<') return '&lt;';
+    if (ch === '>') return '&gt;';
+    if (ch === '"') return '&quot;';
+    if (ch === "'") return '&#39;';
+    return ch;
+  }
+  
+  function hex2(n) {
+    const v = n < 0 ? 0 : n > 255 ? 255 : n;
+    return v.toString(16).padStart(2, '0');
+  }
+
+  // ---- markov.mjs ----
+  // lib/markov.mjs -- memoryless (order-1) Markov chain over a named state set.
+  //
+  // One name per concept (v0.1.0 API rule): the only constructor is
+  // `makeChain({ states, P, initial? })`. State is exposed as a NAME via
+  // `chain.current`; the index is available as `chain.currentIndex` for
+  // callers that need to route into a parallel data structure like a
+  // probability row.
+  //
+  // The constructor validates that P is square, matches states.length, has
+  // no negative entries, and each row sums to 1 within EPS. This is a hard
+  // requirement: consumers rely on the validation and its exact error
+  // messages for tests.
+  
+  const EPS = 1e-9;
+  
+  function makeChain({ states, P, initial } = {}) {
+    if (!Array.isArray(states) || states.length === 0) {
+      throw new Error('makeChain: states must be a non-empty array of names');
+    }
+    const n = states.length;
+  
+    if (!Array.isArray(P) || P.length !== n) {
+      throw new Error(`makeChain: P must be a ${n}x${n} matrix (rows)`);
+    }
+    for (let i = 0; i < n; i++) {
+      const row = P[i];
+      if (!Array.isArray(row) || row.length !== n) {
+        throw new Error(`makeChain: P row ${i} must have length ${n}`);
+      }
+      let s = 0;
+      for (let j = 0; j < n; j++) {
+        const v = row[j];
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+          throw new Error(`makeChain: P[${i}][${j}] must be a finite number`);
+        }
+        if (v < 0) throw new Error(`makeChain: P[${i}][${j}] = ${v} must be >= 0`);
+        s += v;
+      }
+      if (Math.abs(s - 1) > EPS) {
+        throw new Error(`makeChain: P row ${i} sums to ${s}, must sum to 1 (+-${EPS})`);
+      }
+    }
+  
+    const stateIndex = new Map(states.map((name, i) => [name, i]));
+    let curIdx = stateIndex.has(initial) ? stateIndex.get(initial) : 0;
+  
+    function step(rng) {
+      if (typeof rng !== 'function') throw new Error('makeChain.step: rng() must be a function returning [0,1)');
+      const u = rng();
+      if (typeof u !== 'number' || !(u >= 0) || !(u < 1)) {
+        throw new Error(`makeChain.step: rng() returned ${u}, must be in [0, 1)`);
+      }
+      const row = P[curIdx];
+      let acc = 0;
+      for (let j = 0; j < n; j++) {
+        acc += row[j];
+        if (u < acc) {
+          curIdx = j;
+          return states[curIdx];
+        }
+      }
+      // Floating drift fall-through: land on the last non-zero entry.
+      for (let j = n - 1; j >= 0; j--) {
+        if (row[j] > 0) { curIdx = j; return states[curIdx]; }
+      }
+      return states[curIdx];
+    }
+  
+    function row() { return P[curIdx].slice(); }
+  
+    function reset(name) {
+      if (!stateIndex.has(name)) throw new Error(`makeChain.reset: unknown state ${JSON.stringify(name)}`);
+      curIdx = stateIndex.get(name);
+    }
+  
+    return {
+      get current() { return states[curIdx]; },
+      get currentIndex() { return curIdx; },
+      step,
+      row,
+      reset,
+      states: states.slice(),
+      P: P.map(r => r.slice()),
+    };
+  }
+
+  // ---- heightmap.mjs ----
+  // lib/heightmap.mjs -- seeded procedural heightmap (value noise + fBm).
+  //
+  // makeHeightmap({ seed, latticeSize?, octaves?, persistence?, baseFreq? })
+  //   -> { sample(x, y) -> [0, 1], seed, latticeSize, octaves }
+  //
+  // Deterministic per seed: two calls with the same seed produce byte-identical
+  // samples. Uses 2D value noise with cubic smoothstep interpolation and fBm
+  // octaves; no trig, no external libraries.
+  
+  
+  function smoothstep(t) { return t * t * (3 - 2 * t); }
+  
+  function makeLattice(seed, size) {
+    const rng = seededRng(seed);
+    const grid = new Float32Array(size * size);
+    for (let i = 0; i < grid.length; i++) grid[i] = rng();
+    return grid;
+  }
+  
+  function sampleLattice(grid, size, x, y) {
+    const gx = ((x % size) + size) % size;
+    const gy = ((y % size) + size) % size;
+    const xi = Math.floor(gx);
+    const yi = Math.floor(gy);
+    const xf = gx - xi;
+    const yf = gy - yi;
+    const xi1 = (xi + 1) % size;
+    const yi1 = (yi + 1) % size;
+    const a = grid[yi  * size + xi];
+    const b = grid[yi  * size + xi1];
+    const c = grid[yi1 * size + xi];
+    const d = grid[yi1 * size + xi1];
+    const u = smoothstep(xf);
+    const v = smoothstep(yf);
+    const ab = a + (b - a) * u;
+    const cd = c + (d - c) * u;
+    return ab + (cd - ab) * v;
+  }
+  
+  function makeHeightmap({
+    seed = 1,
+    latticeSize = 16,
+    octaves = 4,
+    persistence = 0.5,
+    baseFreq = 0.15,
+  } = {}) {
+    if (!Number.isInteger(latticeSize) || latticeSize < 2) {
+      throw new Error('makeHeightmap: latticeSize must be an integer >= 2');
+    }
+    if (!Number.isInteger(octaves) || octaves < 1) {
+      throw new Error('makeHeightmap: octaves must be a positive integer');
+    }
+    const grid = makeLattice(seed, latticeSize);
+    function sample(x, y) {
+      let total = 0, amp = 1, norm = 0, freq = baseFreq;
+      for (let o = 0; o < octaves; o++) {
+        total += sampleLattice(grid, latticeSize, x * freq, y * freq) * amp;
+        norm += amp;
+        amp *= persistence;
+        freq *= 2;
+      }
+      return total / norm;
+    }
+    return { sample, seed, latticeSize, octaves };
+  }
+
+  // ---- iso.mjs ----
+  // lib/iso.mjs -- painter-back-to-front isometric ASCII column renderer.
+  //
+  // v0.1.0 API (post-review 2026-09-29):
+  //   renderIso({
+  //     // grid -- rectangular by default; `n` sets a square shortcut.
+  //     n?, cols?, rows?, depth?, hmax?,
+  //     // sample functions -- always receive ctx; no arity sniffing.
+  //     heightAt,        // (worldX, worldY) -> number | { floor, roof }
+  //     colorAt,         // (ctx) -> css colour (hex or rgb())
+  //     glyphAt,         // (ctx) -> single character; optional
+  //     camera = { x: 0, y: 0, rot: 0 },
+  //     shadeSideBy = 0.55,
+  //     format = 'runs', // 'runs' -> [{ text, color }[]] rows; 'html' -> string with <span>
+  //     sky = ' ', skyColor = null,
+  //     obliqueDx = 1, obliqueDy = 1,
+  //   })
+  //
+  // ctx passed to colorAt/glyphAt/(optional) userland functions has:
+  //   { i, j, h,                       // ELRD Engine compat: i=worldX, j=worldY, h=height
+  //     worldX, worldY, worldZ,        // world coords + stack height
+  //     kind,                          // 'sky' | 'top' | 'side' | 'roof' | 'floor'
+  //     height,                        // same as h
+  //     stack,                         // integer stack row of the top
+  //     screenX, screenY }             // buffer coordinates
+  //
+  // heightAt may return { floor, roof } for arch/overhang columns; the
+  // renderer draws floor + roof with a gap between (kind='sky' inside the
+  // gap). Plain numbers are the common case.
+  
+  
+  // Only interpolate colour values that match a known-safe CSS colour shape
+  // into `style="color:..."`; anything else (empty, invalid, or hostile)
+  // causes the style attribute to be dropped so the run emits without a
+  // colour rather than opening an injection vector.
+  const SAFE_COLOR_RE = /^#[0-9a-f]{6}$|^rgb\(\d+,\d+,\d+\)$/i;
+  function isSafeColor(c) {
+    return typeof c === 'string' && SAFE_COLOR_RE.test(c);
+  }
+  
+  function renderIso({
+    n,
+    cols,
+    rows,
+    depth,
+    hmax,
+    heightAt,
+    colorAt,
+    glyphAt,
+    camera = { x: 0, y: 0, rot: 0 },
+    shadeSideBy = 0.55,
+    format = 'runs',
+    sky = ' ',
+    skyColor = null,
+    obliqueDx = 1,
+    obliqueDy = 1,
+  } = {}) {
+    // `n` is the square shortcut. If provided, cols/rows/depth all default to n
+    // and hmax defaults to n so the whole scene fits.
+    if (typeof n === 'number') {
+      if (cols  == null) cols  = n * 4 + 6;
+      if (rows  == null) rows  = n + (hmax ?? n) + 4;
+      if (depth == null) depth = n;
+      if (hmax  == null) hmax  = n;
+    }
+    if (!Number.isInteger(cols) || cols <= 0) throw new Error('renderIso: cols must be a positive integer');
+    if (!Number.isInteger(rows) || rows <= 0) throw new Error('renderIso: rows must be a positive integer');
+    if (!Number.isInteger(depth) || depth <= 0) throw new Error('renderIso: depth must be a positive integer');
+    if (typeof heightAt !== 'function') throw new Error('renderIso: heightAt(x, y) is required');
+    if (typeof colorAt !== 'function') throw new Error('renderIso: colorAt(ctx) is required');
+    if (glyphAt !== undefined && typeof glyphAt !== 'function') throw new Error('renderIso: glyphAt must be a function');
+  
+    const rot = ((camera.rot || 0) % 4 + 4) % 4;
+  
+    const buf = new Array(rows);
+    for (let r = 0; r < rows; r++) {
+      buf[r] = new Array(cols);
+      for (let c = 0; c < cols; c++) buf[r][c] = { ch: sky, color: skyColor };
+    }
+    function put(sx, sy, ch, color) {
+      if (sx < 0 || sx >= cols || sy < 0 || sy >= rows) return;
+      buf[sy][sx] = { ch, color };
+    }
+  
+    const stackMax = Number.isFinite(hmax) ? hmax : Math.max(1, rows - depth * obliqueDy - 2);
+  
+    // Painter order: far first (large worldY), near overwrites.
+    for (let wY = depth - 1; wY >= 0; wY--) {
+      for (let wX = 0; wX < cols; wX++) {
+        const worldPos = applyRotation((camera.x || 0) + wX, (camera.y || 0) + wY, rot);
+        const sample = normaliseHeight(heightAt(worldPos.x, worldPos.y));
+  
+        const floorStack = Math.round(sample.floor * stackMax);
+        const roofStack  = Math.round(sample.roof  * stackMax);
+  
+        const screenBaseX = wX + wY * obliqueDx;
+        const screenBaseY = rows - 1 - wY * obliqueDy;
+  
+        // Sides + top for the ground column.
+        for (let s = 0; s <= floorStack; s++) {
+          const sx = screenBaseX;
+          const sy = screenBaseY - s;
+          const kind = s === floorStack ? (sample.hasGap ? 'floor' : 'top') : 'side';
+          const ctx = makeCtx({ worldX: worldPos.x, worldY: worldPos.y, worldZ: s, kind, height: sample.floor, stack: floorStack, screenX: sx, screenY: sy });
+          const g = glyphAt ? glyphAt(ctx) : defaultGlyph(kind);
+          const cRaw = colorAt(ctx) || skyColor;
+          const c = kind === 'side' ? shadeHex(cRaw, shadeSideBy) : cRaw;
+          put(sx, sy, g || sky, c);
+        }
+  
+        // Arch roof + gap under it (if this column has one).
+        if (sample.hasGap && roofStack > floorStack) {
+          const sx = screenBaseX;
+          const sy = screenBaseY - roofStack;
+          const ctx = makeCtx({ worldX: worldPos.x, worldY: worldPos.y, worldZ: roofStack, kind: 'roof', height: sample.roof, stack: roofStack, screenX: sx, screenY: sy });
+          put(sx, sy, glyphAt ? (glyphAt(ctx) || sky) : '_', colorAt(ctx) || skyColor);
+        }
+      }
+    }
+  
+    const rowsOut = new Array(rows);
+    for (let r = 0; r < rows; r++) rowsOut[r] = groupRuns(buf[r]);
+  
+    if (format === 'html') {
+      let html = '';
+      for (let r = 0; r < rowsOut.length; r++) {
+        for (const run of rowsOut[r]) {
+          const safe = Array.from(run.text).map(escapeChar).join('');
+          // Only interpolate the colour into `style="color:..."` when it
+          // matches the safe shape. Anything else emits the run without a
+          // colour so an attacker-controlled colour value can't escape the
+          // attribute and inject markup.
+          if (isSafeColor(run.color)) {
+            html += `<span style="color:${run.color}">${safe}</span>`;
+          } else {
+            html += safe;
+          }
+        }
+        html += '\n';
+      }
+      return html;
+    }
+    return { rows: rowsOut, cols, sky, skyColor };
+  }
+  
+  function makeCtx({ worldX, worldY, worldZ, kind, height, stack, screenX, screenY }) {
+    return {
+      // ELRD Engine compatibility aliases:
+      i: worldX,
+      j: worldY,
+      h: height,
+      // Full ctx:
+      worldX, worldY, worldZ,
+      kind, height, stack,
+      screenX, screenY,
+    };
+  }
+  
+  function groupRuns(row) {
+    const runs = [];
+    if (row.length === 0) return runs;
+    let cur = { text: row[0].ch, color: row[0].color };
+    for (let i = 1; i < row.length; i++) {
+      if (row[i].color === cur.color) cur.text += row[i].ch;
+      else { runs.push(cur); cur = { text: row[i].ch, color: row[i].color }; }
+    }
+    runs.push(cur);
+    return runs;
+  }
+  
+  function applyRotation(x, y, rot) {
+    switch (rot) {
+      case 0: return { x, y };
+      case 1: return { x: y, y: -x };
+      case 2: return { x: -x, y: -y };
+      case 3: return { x: -y, y: x };
+      default: return { x, y };
+    }
+  }
+  
+  function normaliseHeight(sample) {
+    if (typeof sample === 'number') {
+      const h = clamp01(sample);
+      return { floor: h, roof: 1, hasGap: false };
+    }
+    if (sample && typeof sample === 'object') {
+      const floor = clamp01(sample.floor);
+      const roof  = clamp01(sample.roof);
+      return { floor, roof: Math.max(roof, floor), hasGap: roof > floor };
+    }
+    throw new Error('renderIso: heightAt returned an unsupported value');
+  }
+  
+  function clamp01(v) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
+    if (v < 0) return 0;
+    if (v > 1) return 1;
+    return v;
+  }
+  
+  function defaultGlyph(kind) {
+    if (kind === 'top' || kind === 'roof') return '#';
+    if (kind === 'side') return '|';
+    if (kind === 'floor') return '=';
+    return ' ';
+  }
+  
+  function shadeHex(hex, f) {
+    if (typeof hex !== 'string' || hex.length !== 7 || hex[0] !== '#') return hex;
+    const v = parseInt(hex.slice(1), 16);
+    const r = Math.round(((v >> 16) & 0xff) * f);
+    const g = Math.round(((v >>  8) & 0xff) * f);
+    const b = Math.round(( v        & 0xff) * f);
+    return '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0');
+  }
+  
+  // Exported only for tests; the renderer uses it above.
+
+  // ---- fit.mjs ----
+  // lib/fit.mjs -- terrain-range fit + stack-row helpers.
+  //
+  // Utilities for consumers that want the height ramp to always span the
+  // on-screen range (blue at the lowest visible column, red at the highest),
+  // and for testing the stack-row position of a specific normalised height.
+  
+  function computeTerrainRange({ heightAt, cols, depth, camera }) {
+    let min = Infinity, max = -Infinity;
+    for (let dy = 0; dy < depth; dy++) {
+      for (let dx = 0; dx < cols + depth; dx++) {
+        const s = heightAt((camera?.x || 0) + dx, (camera?.y || 0) + dy);
+        const floor = typeof s === 'number' ? s : s.floor;
+        const roof  = typeof s === 'number' ? s : s.roof;
+        if (floor < min) min = floor;
+        if (roof  > max) max = roof;
+      }
+    }
+    if (!isFinite(min) || !isFinite(max) || max - min < 1e-6) {
+      return { minH: 0, maxH: 1 };
+    }
+    return { minH: min, maxH: max };
+  }
+  
+  function makeNormalisedHeightAt(heightAt, terrainRange) {
+    return function(x, y) {
+      const s = heightAt(x, y);
+      const { minH, maxH } = terrainRange;
+      const span = Math.max(1e-6, maxH - minH);
+      if (typeof s === 'number') return (s - minH) / span;
+      return {
+        floor: (s.floor - minH) / span,
+        roof:  (s.roof  - minH) / span,
+      };
+    };
+  }
+  
+  // Which stack row a given normalised height lands on, matching the iso
+  // renderer's math.
+  function stackRowOf(normalisedHeight, { rows, depth, hmax, obliqueDy = 1 }) {
+    const stackMax = Number.isFinite(hmax) ? hmax : Math.max(1, rows - depth * obliqueDy - 2);
+    return Math.round(normalisedHeight * stackMax);
+  }
+  
+  // Bin a normalised value into one of five named ramp bands so tests can
+  // assert "the frame shows at least K of 5 bands".
+  const RAMP_BANDS = ['low', 'meadow', 'field', 'hill', 'peak'];
+  function rampBandOf(normalisedValue) {
+    const v = normalisedValue < 0 ? 0 : normalisedValue > 1 ? 1 : normalisedValue;
+    if (v < 0.10) return 'low';
+    if (v < 0.35) return 'meadow';
+    if (v < 0.60) return 'field';
+    if (v < 0.85) return 'hill';
+    return 'peak';
+  }
+
+  return {
+    cryptoRng, seededRng,
+    ramp, shade, escapeChar,
+    makeChain,
+    makeHeightmap,
+    renderIso,
+    computeTerrainRange, makeNormalisedHeightAt, stackRowOf, rampBandOf,
+    RAMP_BANDS,
+  };
+})();
+/* ===== end ascii-engine ===== */
+
+/* ===== the wheel's pair-judgement surface (illustrative model, not data) ===== */
+const N = 32;
+const LEX = { A: [0, 16], Bp: [3, 13] };
+const inCat = (i, [lo, hi]) => (i >= lo && i < hi) ? 1 : 0;
+const ringDist = (i, j) => { const d = Math.abs(i - j); return Math.min(d, N - d); };
+const untaught = (i, j) => 0.06 + 0.66 / (1 + Math.exp(-(ringDist(i, j) - 8) / 1.8));
+const crosses = (i, j, lex) => inCat(i, LEX[lex]) !== inCat(j, LEX[lex]);
+const LIFT = 0.28;
+const taught = (i, j, lex, dose) => Math.min(1, untaught(i, j) + (crosses(i, j, lex) ? LIFT * dose : 0));
+const S = { mode: "taught", lex: "A", dose: 1, yaw: .72, yawTarget: .72, playing: false };
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ===== the landscape: the surface as a heightmap, drawn by a column raycaster in text characters ===== */
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x, mix = (a, b, t) => a + (b - a) * t;
+const hash2 = (x, y) => { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + 1013) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+function vnoise(x, y) { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash2(xi, yi), b = hash2(xi + 1, yi), c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; }
+function fbm(x, y, o = 4) { let s = 0, a = .5, f = 1; for (let i = 0; i < o; i++) { s += a * vnoise(x * f, y * f); f *= 2.03; a *= .5; } return s; }
+const MAP = 192, CELL = MAP / N, HS = 30, WATER = .115, PAD = 34;   // map units per ring position; height of a judgement of 1
+const hm = new Float32Array(MAP * MAP), val = new Float32Array(MAP * MAP), eff = new Uint8Array(MAP * MAP);
+function valueAt(u, v) { // continuous along the ring, stepped where a pair crosses a boundary
+  const d = Math.abs(u - v), rd = Math.min(d, N - d), base = 0.06 + 0.66 / (1 + Math.exp(-(rd - 8) / 1.8));
+  const i = Math.floor(u) % N, j = Math.floor(v) % N, cr = crosses(i, j, S.lex) ? 1 : 0;
+  if (S.mode === "untaught") return [base, 0];
+  if (S.mode === "effect") return [cr ? .5 * S.dose : 0, cr];
+  return [Math.min(1, base + cr * LIFT * S.dose), cr];
+}
+function buildMap() {
+  for (let y = 0; y < MAP; y++) for (let x = 0; x < MAP; x++) {
+    const [v, c] = valueAt((x + .5) / CELL, (y + .5) / CELL), i = y * MAP + x;
+    const grit = (fbm(x * .15, y * .15, 3) - .5) * (S.mode === "effect" ? .01 : .035);
+    val[i] = v; eff[i] = c; hm[i] = (S.mode === "effect" ? v : Math.max(WATER * .92, v)) * HS + grit * HS;
+  }
+}
+const H_AT = (x, y) => { if (x < 0 || y < 0 || x >= MAP || y >= MAP) return -1; return hm[(y | 0) * MAP + (x | 0)]; };
+
+const canvas = document.getElementById("c"), ctx2 = canvas.getContext("2d");
+let DPR = 1, CWd = 3, CHd = 5, W = 0, H = 0, outImg, out, atlas, atlasIndex = {};
+const FAM = { sky: " .·:-=", cloud: " .:-~=", water: " .-~≈=", near: " .,'`;", mid: " .,:;=", field: " .:;=%", rock: " .:;%#", far: " :;%#@",
+  gold: " *+✦@#", flat: " .:=", base: " .·:", pole: "|║", flag: "▶>=#", sun: "@●█", foam: "·°o" };
+function buildAtlas() {
+  const chars = [...new Set(Object.values(FAM).join("") + "?")], c = document.createElement("canvas"); c.width = CWd * chars.length; c.height = CHd;
+  const x = c.getContext("2d", { willReadFrequently: true }); x.fillStyle = "#000"; x.fillRect(0, 0, c.width, c.height); x.fillStyle = "#fff";
+  x.font = `${Math.max(3, Math.round(CHd * 1.05))}px ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace`;
+  chars.forEach((ch, i) => { x.save(); x.beginPath(); x.rect(i * CWd, 0, CWd, CHd); x.clip(); const m = x.measureText(ch).width || CWd; x.fillText(ch, i * CWd + (CWd - m) / 2, CHd * .86); x.restore(); atlasIndex[ch] = i; });
+  const d = x.getImageData(0, 0, c.width, c.height).data; atlas = new Uint8Array(chars.length * CWd * CHd);
+  chars.forEach((_, i) => { for (let yy = 0; yy < CHd; yy++) for (let xx = 0; xx < CWd; xx++) atlas[(i * CHd + yy) * CWd + xx] = d[(yy * c.width + i * CWd + xx) * 4]; });
+}
+let draft = false, draftT = 0;
+function resize(asDraft = false) {
+  draft = asDraft; const r = canvas.getBoundingClientRect(); DPR = Math.min(window.devicePixelRatio || 1, 3);
+  const devW = Math.round(r.width * DPR), devH = Math.round(r.height * DPR), baseCW = devW > 1500 ? 3 : 4, baseCH = Math.round(baseCW * 1.6);
+  // at least 700 x 400 glyphs (Anthem 2026-09-30, the GrowRound standard): rows are raised to 400 and columns follow the display
+  // aspect, so the picture keeps its shape; on small screens the buffer is supersampled and the browser scales it to the stage
+  if (draft) { CWd = baseCW; CHd = baseCH; W = Math.floor(devW / CWd); H = Math.floor(devH / CHd); } // while moving: native cells, fast
+  else { H = Math.max(400, Math.floor(devH / baseCH)); W = Math.max(700, Math.round(H * (devW / devH) * (baseCH / baseCW)));
+    CWd = Math.max(2, Math.min(baseCW, Math.floor(devW / W))); CHd = Math.round(CWd * baseCH / baseCW); }
+  canvas.width = W * CWd; canvas.height = H * CHd;
+  outImg = ctx2.createImageData(canvas.width, canvas.height); out = outImg.data; buildAtlas(); render();
+}
+const GAMMA = new Float32Array(4097).map((_, i) => Math.pow(i / 4096, .82) * 255), gam = v => GAMMA[v <= 0 ? 0 : v >= 1 ? 4096 : (v * 4096) | 0];
+const INK = new Float32Array(1025).map((_, i) => Math.pow(i / 1024, .55) * .78);
+function writeCell(x, y, r, g, b, fam, light, near) {
+  const grain = hash2(x * 3 + 7, y * 5 + 11); let gi = Math.floor(clamp(INK[light <= 0 ? 0 : light >= 1 ? 1024 : (light * 1024) | 0] + near * .14 + grain * .14) * fam.length);
+  gi = Math.min(fam.length - 1, Math.max(0, gi)); const gl = atlasIndex[fam[gi]] ?? atlasIndex["?"];
+  const vx = x / W - .5, vy = y / H - .5, vig = 1 - (vx * vx * .35 + vy * vy * .6), R = gam(r * vig), G = gam(g * vig), B = gam(b * vig);
+  const under = .42, rowStride = canvas.width * 4, a0 = gl * CWd * CHd; let o = (y * CHd * canvas.width + x * CWd) * 4;
+  for (let yy = 0; yy < CHd; yy++, o += rowStride) { let p = o; const ab = a0 + yy * CWd;
+    for (let xx = 0; xx < CWd; xx++, p += 4) { const k = under + (1 - under) * (atlas[ab + xx] / 255) * 1.25; out[p] = R * k; out[p + 1] = G * k; out[p + 2] = B * k; out[p + 3] = 255; } }
+}
+// materials by judged distance; colours track the legend
+function surface(i, x, y) {
+  const v = val[i];
+  if (S.mode === "effect") return eff[i] ? ["gold", [.95, .72, .2], .4] : ["flat", [.34, .36, .4], 0];
+  if (v < WATER) return ["water", [.14, .3, .5], 0];
+  const stops = [[.12, [.3, .52, .6], "near"], [.3, [.32, .52, .22], "mid"], [.5, [.6, .56, .3], "field"], [.72, [.66, .38, .22], "rock"], [1.01, [.74, .24, .16], "far"]];
+  for (let k = 0; k < stops.length; k++) if (v < stops[k][0]) { const [t1, c1, f] = stops[k], [t0, c0] = k ? stops[k - 1] : [WATER, [.3, .52, .6]], e = clamp((v - t0) / (t1 - t0));
+    return [f, [mix(c0[0], c1[0], e), mix(c0[1], c1[1], e), mix(c0[2], c1[2], e)], 0]; }
+  return ["far", [.74, .24, .16], 0];
+}
+function render() {
+  if (!W) return; buildMap();
+  const cam = { x: MAP / 2 - Math.cos(S.yaw) * MAP * 1.25, y: MAP / 2 - Math.sin(S.yaw) * MAP * 1.25, z: HS * 3.6 }, heading = S.yaw, fov = 1.05, tanH = Math.tan(fov / 2);
+  const hor = Math.round(H * .1), scale = H * 1.15, sunAz = S.yaw + 2.1, sun = [Math.cos(sunAz) * .62, Math.sin(sunAz) * .62, .48];
+  const col = new Float32Array(H * 4); const done = new Uint8Array(H);
+  for (let c = 0; c < W; c++) {
+    const off = (c / W - .5) * 2 * tanH, dx = Math.cos(heading) - Math.sin(heading) * off, dy = Math.sin(heading) + Math.cos(heading) * off;
+    let yBot = H, z = 1;
+    while (z < MAP * 2.6 && yBot > 0) {
+      const px = cam.x + dx * z, py = cam.y + dy * z; let h = H_AT(px, py), inside = h >= 0;
+      if (!inside) h = -PAD * .0 - 1.5 + (fbm(px * .05, py * .05, 3) - .5) * 2; // the world around the map: a low dark plain
+      const yt = Math.floor(hor + (cam.z - h) / z * scale);
+      if (yt < yBot) {
+        const i = inside ? (py | 0) * MAP + (px | 0) : -1;
+        let fam, alb, emis = 0, light;
+        if (inside) { [fam, alb, emis] = surface(i, px | 0, py | 0); }
+        else { fam = "base"; alb = [.16, .17, .18]; }
+        // slope shading from the heightmap gradient, plus ambient; water reflects the sky
+        const hx = inside ? H_AT(Math.min(MAP - 1, px + 1), py) - H_AT(Math.max(0, px - 1), py) : 0, hy = inside ? H_AT(px, Math.min(MAP - 1, py + 1)) - H_AT(px, Math.max(0, py - 1)) : 0;
+        const nl = Math.hypot(hx, hy, 2), lam = Math.max(0, (-hx * sun[0] - hy * sun[1] + 2 * sun[2]) / nl / Math.hypot(...sun));
+        light = .32 + lam * 1.05; let r = alb[0] * light, g = alb[1] * light, b = alb[2] * light;
+        if (fam === "water") { const sp = hash2(px * 4 | 0, py * 4 | 0) > .985 ? .6 : 0; r = .1 + r * .5 + sp; g = .2 + g * .5 + sp; b = .38 + b * .5 + sp; light = .55 + sp; }
+        if (fam === "gold") { r += .25 * S.dose; g += .18 * S.dose; b += .04; light = .9; }
+        const fog = clamp((z - MAP * .7) / (MAP * 1.9)) * .85; r = mix(r, .56, fog); g = mix(g, .62, fog); b = mix(b, .72, fog);
+        const near = 1 - clamp(z / (MAP * 1.6));
+        for (let y = Math.max(0, yt); y < yBot; y++) { const edge = y === yt && inside && Math.abs(hx) + Math.abs(hy) > HS * .08; // cliff tops catch the light
+          writeCell(c, y, r * (edge ? 1.25 : 1), g * (edge ? 1.25 : 1), b * (edge ? 1.2 : 1), FAM[fam], light * (edge ? 1.2 : 1), near); done[y] = 1; }
+        yBot = Math.max(0, yt);
+      }
+      z += .35 + z * .006;
+    }
+    // sky above whatever the ray did not hit
+    for (let y = 0; y < yBot; y++) { const t = y / Math.max(1, hor + 8), az = heading + (c / W - .5) * fov;
+      let r = mix(.2, .66, t), g = mix(.36, .76, t), b = mix(.72, .9, t); const cl = fbm(az * 18, y * .09, 5) - .52;
+      let fam = "sky"; if (cl > 0) { const dd = clamp(cl * 3); r = mix(r, .95, dd); g = mix(g, .95, dd); b = mix(b, .97, dd); fam = "cloud"; }
+      writeCell(c, y, r, g, b, FAM[fam], (r + g + b) / 2.4, 0); }
+  }
+  // boundary flags along the map's two edges: one flag per category boundary of the chosen vocabulary
+  const [lo, hi] = LEX[S.lex], marks = [];
+  for (const p of [lo, hi]) { marks.push([p * CELL, -2], [-2, p * CELL], [p * CELL, MAP + 1], [MAP + 1, p * CELL]); }
+  const cosH = Math.cos(heading), sinH = Math.sin(heading);
+  for (const [fx, fy] of marks) {
+    const rx = fx - cam.x, ry = fy - cam.y, fwd = rx * cosH + ry * sinH, side = -rx * sinH + ry * cosH; if (fwd < 2) continue;
+    const cxs = Math.round((side / fwd / tanH * .5 + .5) * W), base = Math.max(0, H_AT(Math.min(MAP - 1, Math.max(0, fx)), Math.min(MAP - 1, Math.max(0, fy))));
+    const yb = Math.floor(hor + (cam.z - base) / fwd * scale), yt = Math.floor(hor + (cam.z - base - HS * .8) / fwd * scale);
+    for (let y = Math.max(0, yt); y < Math.min(H, yb); y++) if (cxs >= 0 && cxs < W) writeCell(cxs, y, .85, .82, .72, FAM.pole, .9, 1);
+    const fh = Math.max(2, Math.round((yb - yt) * .18)), fw = Math.max(3, Math.round(fh * 1.6));
+    for (let y = Math.max(0, yt); y < Math.min(H, yt + fh); y++) for (let x = cxs + 1; x <= cxs + fw; x++) if (x >= 0 && x < W) writeCell(x, y, .95, .9, .78, FAM.flag, .95, 1);
+  }
+  ctx2.putImageData(outImg, 0, 0);
+  const cap = document.getElementById("caption"), lexName = S.lex === "A" ? "A (two equal halves)" : "B′ (two unequal parts)";
+  cap.innerHTML = S.mode === "untaught" ? "Untaught model: judgement follows distance only, a <b>smooth valley</b> with a lake along the diagonal."
+    : S.mode === "effect" ? `The effect of teaching vocabulary ${lexName} at dose ${Math.round(S.dose * 100)}%: the land goes flat except the <b>gold seams</b>, the boundary-crossing pairs.`
+    : `Taught vocabulary ${lexName} at dose ${Math.round(S.dose * 100)}%: the land breaks into plateaus with <b>cliffs</b> at the category boundaries (the flags).`;
+  document.getElementById("scene-alt").textContent = cap.textContent;
+}
+
+/* ===== controls ===== */
+function press(sel, el) { document.querySelectorAll(sel).forEach(x => x.setAttribute("aria-pressed", String(x === el))); }
+document.querySelectorAll("button[data-mode]").forEach(b => b.addEventListener("click", () => { S.mode = b.dataset.mode; press("button[data-mode]", b); render(); }));
+document.querySelectorAll("button[data-lex]").forEach(b => b.addEventListener("click", () => { S.lex = b.dataset.lex; press("button[data-lex]", b); render(); }));
+const doseEl = document.getElementById("dose"); doseEl.addEventListener("input", e => { S.dose = e.target.value / 100; render(); });
+document.getElementById("turn").addEventListener("click", () => { S.yawTarget += Math.PI / 2; if (reduced) { S.yaw = S.yawTarget; render(); } });
+addEventListener("keydown", e => { if (e.key === "ArrowRight") S.yawTarget += Math.PI / 8; if (e.key === "ArrowLeft") S.yawTarget -= Math.PI / 8; if (reduced) { S.yaw = S.yawTarget; render(); } });
+let drag = null; canvas.addEventListener("pointerdown", e => { drag = e.clientX; canvas.setPointerCapture(e.pointerId); canvas.style.cursor = "grabbing"; });
+canvas.addEventListener("pointermove", e => { if (drag === null) return; S.yawTarget += (e.clientX - drag) * .006; S.yaw = S.yawTarget; drag = e.clientX; (draftT = performance.now(), draft ? render() : resize(true)); });
+canvas.addEventListener("pointerup", () => { drag = null; canvas.style.cursor = "grab"; });
+const playBtn = document.getElementById("play");
+playBtn.addEventListener("click", () => { S.playing = !S.playing; playBtn.setAttribute("aria-pressed", String(S.playing)); playBtn.textContent = S.playing ? "❚❚ pause" : "▶ animate teaching";
+  if (S.playing && S.mode === "untaught") { S.mode = "taught"; press("button[data-mode]", document.querySelector('button[data-mode="taught"]')); } });
+if (reduced) playBtn.disabled = true;
+addEventListener("resize", () => { clearTimeout(resize.t); resize.t = setTimeout(resize, 200); });
+
+/* ===== the autoresearch loop as a Markov chain (illustrative probabilities) ===== */
+const STATES = ["question", "draft pre-registration", "falsifier attack", "revise", "selftest", "seal (sha256)", "fire (train)", "wait", "verdict", "next question"];
+const P = [
+  [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, .85, 0, .15, 0, 0, 0, 0],
+  [0, 0, .35, 0, .65, 0, 0, 0, 0, 0],
+  [0, 0, 0, .2, 0, .8, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+  [0, 0, 0, 0, 0, 0, .05, .75, .2, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+];
+const chain = Engine.makeChain({ states: STATES, P: P });
+const rand = Engine.cryptoRng();
+const chainEl = document.getElementById("chain");
+function drawChain() {
+  const s = chain.currentIndex; chainEl.innerHTML = "";
+  STATES.forEach((n, i) => { const sp = document.createElement("span"); sp.textContent = (i ? "  →  " : "") + n; if (i === s) sp.className = "on"; chainEl.append(sp); });
+  const nx = document.createElement("div"); nx.className = "fine";
+  nx.textContent = "now: " + STATES[s] + "   ·   next: " + P[s].map((p, j) => p ? `${STATES[j]} (${p.toFixed(2)})` : null).filter(Boolean).join(", ");
+  chainEl.append(nx);
+}
+
+/* ===== loop: render only when something changes ===== */
+resize(); drawChain();
+if (!reduced) {
+  let t0 = 0, tc = 0, dir = -1;
+  (function tick(t) {
+    let dirty = false;
+    if (Math.abs(S.yawTarget - S.yaw) > 1e-3) { S.yaw += (S.yawTarget - S.yaw) * .12; dirty = true; }
+    if (S.playing && t - t0 > 90) { S.dose = Math.max(0, Math.min(1, S.dose + dir * 0.025)); if (S.dose === 1 || S.dose === 0) dir = -dir; doseEl.value = Math.round(S.dose * 100); dirty = true; t0 = t; }
+    if (dirty) { draftT = t; if (!draft) resize(true); else render(); }       // coarse while turning or teaching
+    else if (draft && t - draftT > 150) resize(false);                     // full detail (>= 700 x 400) once it stops
+    if (t - tc > 1500) { chain.step(rand); drawChain(); tc = t; }
+    requestAnimationFrame(tick);
+  })(0);
+}
+</script>
+</body>
+</html>
