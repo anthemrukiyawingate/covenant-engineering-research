@@ -56,7 +56,7 @@ Every experiment pairs a model trained with a language against an otherwise iden
 
 | Component | Specification |
 | --- | --- |
-| Base model | Pythia-410m (`EleutherAI/pythia-410m`), a public model of 410 million parameters, at chance on the task before training |
+| Base model | Pythia-410m (`EleutherAI/pythia-410m`), a public model of 410 million parameters, at chance on the task before training. Generation 11 adds nine independent pretraining runs of the same model (PolyPythias, `EleutherAI/pythia-410m-seed1` to `-seed9`) and a second model family, Qwen2.5-0.5B (base) |
 | World | A ring of 32 positions, each presented as a meaningless one-token word |
 | Task | Answer "near" if two positions are within 8 steps around the ring, otherwise "far" |
 | Language A | Two named categories, boundaries at positions 0 and 16 |
@@ -82,15 +82,15 @@ Every experiment pairs a model trained with a language against an otherwise iden
 | Setting | Value |
 | --- | --- |
 | Steps | 4,000 per model, every model read at step 4,000 |
-| Optimiser | AdamW, weight decay 0.1, gradient norm clipped at 1.0 |
+| Optimiser | AdamW on bfloat16 parameters (no fp32 master copy), gradient norm clipped at 1.0. The nominal weight decay (0.1) had no effect: it rounds away in bfloat16 (see `lims/METHODS-NOTE-bf16-optimizer-precision.md`) |
 | Learning rate | 3 × 10⁻⁵, 100 warm-up steps, then linear decay |
 | Batch size | 8 |
-| Precision | bfloat16 |
+| Precision | bfloat16. After 4,000 steps, 67.8% of weight-matrix entries are bit-identical to the base model (91.1% of entries with \|w\| > 0.0077, 6.9% of smaller ones; one checkpoint, descriptive), so fine-tuning here moves mostly small-magnitude weights. Every arm shares this, so no comparison is affected |
 | Maximum sequence length | 128 tokens |
 | Loss | On the answer token only ("near"/"far"); padding on the right |
 | Seeds | One training seed per model, which also fixes the data order; fresh seed ranges for each confirmatory test |
 
-The same recipe was used from generation 1 onward; only the checkpoint interval differed in early pilot runs.
+The same recipe was used from generation 1 onward; only the checkpoint interval differed in early pilot runs. The weight-decay finding was made on 1 October 2026, when two weight-decay settings gave bit-identical models; it applies to every run in the study.
 
 ### Training data and language dose
 
@@ -115,6 +115,9 @@ The licensing threshold for every confirmatory test is p < 0.005, written into e
 | Disagreeing against low-disagreement copy: 25 of 30 | Sign-flip test, 20,000 Monte Carlo draws | Two-sided | 0.0001 |
 | Transfer to a new property: 32 of 36 | Sign-flip test on the interaction, 20,000 Monte Carlo draws (none as large as observed) | One-sided | below 5 × 10⁻⁵ |
 | Generation 10: 16 of 16 | Sign-flip test, exact enumeration of 2¹⁶ patterns | One-sided | 1.53 × 10⁻⁵ (the floor, 1 in 65,536) |
+| Generation 11, nine pretraining runs: 9 of 9 | Sign-flip test on checkpoint means (two training seeds each), exact enumeration of 2⁹ patterns | One-sided | 0.00195 (the floor, 1 in 512) |
+| Generation 11, Qwen2.5-0.5B: 20 of 20 | Seed-level sign-flip test, exact enumeration of 2²⁰ patterns | One-sided | 9.5 × 10⁻⁷ (the floor) |
+| Own task, tested for harm: 29 of 40 | Sign-flip test, 20,000 Monte Carlo draws (none as large as observed) | One-sided | 5.0 × 10⁻⁵ (the floor, 1 in 20,001) |
 | Persistence after withdrawal: 4 of 8, then 4 of 9 | Binomial upper tail against the stated chance rate (0.125, then 0.10) | One-sided | 0.01125 and 0.0083 (below threshold) |
 | Two-speed decay | Likelihood ratio, mixture against a single constant hazard, parametric bootstrap with 20,000 draws | One-sided | 1 in 20,001 |
 
@@ -135,7 +138,7 @@ For n ≤ 20 the sign-flip tests enumerate every pattern exactly; above 20 they 
 | Transformers | 5.9.0 |
 | Tokenizers | 0.22.2 |
 | Datasets | 4.8.5 (as recorded when the environment was verified) |
-| Model weights | `EleutherAI/pythia-410m`. The training code does not pin a revision; the snapshot cached on the training node is `9879c9b5f8bea9051dcb0e68dff21493d67e9d4f` |
+| Model weights | `EleutherAI/pythia-410m`. The training code does not pin a revision; the snapshot cached on the training node is `9879c9b5f8bea9051dcb0e68dff21493d67e9d4f`. Generation 11: `EleutherAI/pythia-410m-seed1` to `-seed9`, and `Qwen/Qwen2.5-0.5B` at snapshot `060db6499f32faf8b98477b0a26969ef7d8b9987` |
 
 Versions for each run are recorded in that run's `pip-freeze.txt`; PyTorch, Transformers and Tokenizers were identical from generation 2 through generation 6. Runs use the Hugging Face libraries offline.
 
@@ -159,13 +162,15 @@ Versions for each run are recorded in that run's `pip-freeze.txt`; PyTorch, Tran
 - **A second language works.** B′ sharpened its own boundaries in 25 of 30 models (probability 0.00005), so the effect is not a quirk of language A.
 - **Disagreeing languages interfere.** Training B′ also raised the effect at A's boundaries, so the study asked whether each language acts only at its own. A turned copy of B′ that disagrees with A lowered the effect at A's boundaries in 25 of 29 models. In a fresh test it lowered it more than a copy with almost no disagreement (25 of 30, probability 0.0001). All copies cost the same small amount of accuracy, so that cost does not explain the difference.
 - **The language can help learning.** Models taught A learned a new property sharing A's boundaries faster than untrained models, beyond the head start any extra training gives (32 of 36 models on fresh seeds, probability below 0.00005).
+- **It generalises.** Across nine independent pretraining runs of Pythia-410m, the effect was positive at every one (9 of 9, probability 0.002, the smallest the test can give), though its size varied between runs more than training noise alone predicts. In a second model family, Qwen2.5-0.5B, it was positive in all 20 models (probability below one in a million). Qwen first missed the bar for learning the task by 0.0035 on two pilot models and passed it on two more at the same recipe; the main test used fresh models.
+- **The right language can also hurt.** Tested for harm on 40 fresh models, the right vocabulary generalised worse than no vocabulary on the world's own near/far task (balanced accuracy lower by 0.041 on average, lower in 29 of 40, probability 0.00005). Every model fitted its training pairs completely, so the difference is in generalisation, not memorisation. The claim is about the average: in 11 of 40 models the right vocabulary was not worse. Together with the transfer result above, a taught partition helps a model learn a new property that shares its boundaries, and hurts generalisation of the world's own property.
 - **The untrained pattern comes from the training text.** Untrained models shared a pattern of confidence across particular pairs. In generation 10, untrained models trained on two reshuffled texts each followed their own text's pattern (16 of 16). The twin comparisons stand, because twins share a text; the results by placement describe this one text.
 
 ### What did not hold
 
 - **Where the effect is stored.** Removing one internal direction lowered the effect sharply, but the same direction appeared, and its removal disrupted the model, in 7 of 8 untrained and 7 of 8 control models, so the instrument failed its specificity check. A narrower, language-specific version met its condition in 0 of 8. Reading the geometry of the internal representation found nothing above its noise floor, and that family of measures was declared exhausted as instrumented. The record does not read these failures as proof that no mechanism exists.
 - **How long it lasts.** After the language was withdrawn, the effect persisted in 4 of 8 models over a short period and 4 of 9 over a long one, both below threshold. The decay followed two speeds rather than one; finer questions are unresolved.
-- **Help on the world's own task.** On a near/far task whose rule changed at A's boundary, models taught the right language did worse than models taught a deliberately wrong one in 28 of 30. That study was designed to detect help, so it licenses neither help nor, strictly, harm. Looking afterwards, the deficit lay in recognising far pairs.
+- **Help on the world's own task.** On a near/far task whose rule changed at A's boundary, models taught the right language did worse than models taught a deliberately wrong one in 28 of 30. That study was designed to detect help, so it licensed no help. A later test pre-registered for harm confirmed the deficit (see above), and, as predicted from the first study, it lay mostly in recognising far pairs.
 - **B′ on the first instrument.** B′ stood out in 2 of 9 models, then 5 of 20, which neither passed nor failed. The later instrument found it clearly (25 of 30); the two answer different questions, and the counts are not pooled.
 - **A limit on the interference finding.** All turned copies of B′ are rotations of one split, so another property that changes with rotation could explain the pattern. The finding rules out the accuracy cost but does not yet confirm the language-specific account.
 
@@ -183,16 +188,19 @@ The table lists every test reported here, in the order run. A dash means no prob
 | Disagreeing copy of B′ lowers the effect at A's boundaries | 25 of 29 | 0.0001 | Licensed |
 | Disagreeing copy lowers it more than a low-disagreement copy | 25 of 30 | 0.0001 | Licensed, with a stated limit |
 | Language A speeds learning of a new property with the same boundaries | 32 of 36 | below 0.00005 | Licensed |
-| Language A helps on the world's own task | right vocabulary did worse in 28 of 30 | — | Not licensed; harm untested |
+| Language A helps on the world's own task | right vocabulary did worse in 28 of 30 | — | Not licensed (tested for help only) |
 | Untrained models' shared pattern follows their training text (generation 10) | 16 of 16 | 0.0000153 | Licensed |
+| Effect holds across nine pretraining runs of Pythia-410m (generation 11) | 9 of 9 | 0.00195 | Licensed |
+| Effect holds in a second model family, Qwen2.5-0.5B (generation 11) | 20 of 20 | 0.00000095 | Licensed |
+| Right vocabulary harms generalisation on the world's own task (tested for harm) | 29 of 40; also below the wrong vocabulary in 37 of 40 | 0.00005 | Licensed |
 | Removing one internal direction is specific to the language | direction also found in 7 of 8 untrained and 7 of 8 control models | — | Failed its specificity check |
 | Narrow, language-specific version of that removal | 0 of 8 | — | Success condition not met |
 | Geometry of the internal representation | nothing above the noise floor | — | Exhausted as instrumented |
 | Effect persists after the language is withdrawn | 4 of 8 (short), 4 of 9 (long) | 0.01125, 0.0083 | Below threshold; unresolved |
 
-![Trial ledger: verdicts of the 26 main tests](figures/fig-ledger.png)
+![Trial ledger: verdicts of the 29 main tests](figures/fig-ledger.png)
 
-*Every main (primary) test the study has run, by verdict: 10 licensed, 5 not licensed or refuted, 10 unresolved, 1 screen. Counts are read from the trial ledger's integrity check when the figure is drawn.*
+*Every main (primary) test the study has run, by verdict: 13 licensed, 5 not licensed or refuted, 10 unresolved, 1 screen. Counts are read from the trial ledger's integrity check when the figure is drawn.*
 
 ## How the work is checked
 
